@@ -19,6 +19,7 @@ def run_agent(question, provider, tools, max_steps=6):
         {"role": "user", "content": question},
     ]
     trace, usage = [], []
+    required_urls = set()
 
     def result(status, answer='', error=None):
         output = {'status': status, 'answer': answer, 'trace': trace, 'usage': usage}
@@ -33,7 +34,7 @@ def run_agent(question, provider, tools, max_steps=6):
         try:
             response = provider.complete(messages, schemas)
         except Exception as exc:
-            error = 'Provider call failed: ' + type(exc).__name__
+            error = f'Provider call failed: {exc}'
             trace.append({'event': 'provider_error', 'step': step, 'error': error})
             return result('error', error=error)
 
@@ -61,6 +62,16 @@ def run_agent(question, provider, tools, max_steps=6):
             answer = message.get('content') or ''
             if not isinstance(answer, str):
                 return result('error', error='Final answer must be text.')
+
+            if required_urls and not any(u in answer for u in required_urls):
+                trace.append({'event': 'validation_missing_source', 'step': step})
+                if step < max_steps:
+                    messages.append({'role': 'user', 'content': 'Câu trả lời cần dẫn nguồn URL incident từ kết quả tool.'})
+                    continue
+                else:
+                    trace.append({'event': 'max_steps', 'step': max_steps})
+                    return result('max_steps')
+
             trace.append({'event': 'final', 'step': step, 'answer': answer})
             return result('completed', answer)
 
@@ -87,6 +98,9 @@ def run_agent(question, provider, tools, max_steps=6):
                         'ok': False, 'error': type(exc).__name__,
                         'message': 'Tool execution failed; no reliable result is available.',
                     }
+
+            if call['name'] == 'get_incident_details' and isinstance(observation, dict) and observation.get('ok') and observation.get('url'):
+                required_urls.add(observation['url'])
             trace.append({
                 'event': 'tool', 'step': step, 'tool_call_id': call['id'],
                 'name': call['name'], 'arguments': args, 'result': observation,
