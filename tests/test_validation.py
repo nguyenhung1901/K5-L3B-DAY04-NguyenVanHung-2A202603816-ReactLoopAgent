@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'evals'))
 from agent import run_agent
-from evals.scenarios import ScenarioTools
+from scenarios import ScenarioTools
 from status_tools import StatusTools
 from test_lab import FakeProvider, tool_call, final
 
